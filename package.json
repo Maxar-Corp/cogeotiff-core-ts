@@ -5,7 +5,8 @@
     "clean": "tsc -b --clean && rimraf 'build'",
     "build": "tsc -b --pretty",
     "build-watch": "tsc -b --pretty --watch",
-    "test": "node --test"
+    "test": "node --test",
+    "prepare": "npm run build"
   },
   "repository": {
     "type": "git",
