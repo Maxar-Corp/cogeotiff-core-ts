@@ -1,0 +1,35 @@
+{
+  "name": "@maxar/cogeotiff-core",
+  "version": "1.0.0",
+  "scripts": {
+    "clean": "tsc -b --clean && rimraf 'build'",
+    "build": "tsc -b --pretty",
+    "build-watch": "tsc -b --pretty --watch",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Maxar-Corp/cogeotiff-core-ts.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "author": "jerry.rumbolt@maxar.com",
+  "license": "MIT",
+  "dependencies": {
+    "@chunkd/source": "^11.1.0",
+    "@chunkd/source-http": "^11.1.0",
+    "npm-pack-all": "^1.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "lerna": "^7.4.2",
+    "rimraf": "^5.0.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
