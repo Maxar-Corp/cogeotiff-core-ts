@@ -22,8 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@chunkd/source": "^11.1.0",
-    "@chunkd/source-http": "^11.1.0",
-    "npm-pack-all": "^1.12.7"
+    "@chunkd/source-http": "^11.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.9.0",
