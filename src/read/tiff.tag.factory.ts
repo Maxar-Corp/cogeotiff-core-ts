@@ -2,8 +2,8 @@ import { CogTiff } from '../cog.tiff.js';
 import { TiffTag } from '../const/tiff.tag.id.js';
 import { TiffTagValueType } from '../const/tiff.tag.value.js';
 import { getUint, getUint64 } from '../util/bytes.js';
-import { DataViewOffset, hasBytes } from './data.view.offset.js';
-import { Tag, TagLazy, TagOffset } from './tiff.tag.js';
+import { type DataViewOffset, hasBytes } from './data.view.offset.js';
+import type { Tag, TagLazy, TagOffset } from './tiff.tag.js';
 import { getTiffTagSize } from './tiff.value.reader.js';
 
 function readTagValue(

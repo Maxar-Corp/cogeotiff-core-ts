@@ -1,6 +1,6 @@
 {
   "name": "@maxar/cogeotiff-core",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
     "clean": "tsc -b --clean && rimraf 'build'",
     "build": "tsc -b --pretty",
@@ -22,13 +22,13 @@
   "license": "MIT",
   "dependencies": {
     "@chunkd/source": "^11.1.0",
-    "@chunkd/source-http": "^11.1.0",
-    "npm-pack-all": "^1.12.7"
+    "@chunkd/source-http": "^11.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.9.0",
-    "lerna": "^7.4.2",
-    "rimraf": "^5.0.5"
+    "@types/node": "^22.10.1",
+    "lerna": "^8.1.9",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2"
   },
   "publishConfig": {
     "access": "public"

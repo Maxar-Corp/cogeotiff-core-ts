@@ -2,8 +2,8 @@ import { getUint } from './util/bytes.js';
 import { CogTiff } from './cog.tiff.js';
 import { TiffCompression, TiffMimeType } from './const/tiff.mime.js';
 import { TiffTag, TiffTagGeo } from './const/tiff.tag.id.js';
-import { Tag, TagInline, TagOffset } from './read/tiff.tag.js';
-import { BoundingBox, Size } from './vector.js';
+import type { Tag, TagInline, TagOffset } from './read/tiff.tag.js';
+import type { BoundingBox, Size } from './vector.js';
 import { fetchAllOffsets, fetchLazy, getValueAt } from './read/tiff.tag.factory.js';
 
 /** Invalid EPSG code */
