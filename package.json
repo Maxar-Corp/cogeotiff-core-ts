@@ -21,14 +21,14 @@
   "author": "jerry.rumbolt@maxar.com",
   "license": "MIT",
   "dependencies": {
-    "@chunkd/source": "^11.1.0",
-    "@chunkd/source-http": "^11.1.0"
+    "@chunkd/source": "11.1.0",
+    "@chunkd/source-http": "11.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.1",
-    "lerna": "^8.1.9",
-    "rimraf": "^6.0.1",
-    "typescript": "^5.7.2"
+    "@types/node": "22.10.1",
+    "lerna": "8.1.9",
+    "rimraf": "6.0.1",
+    "typescript": "5.7.3"
   },
   "publishConfig": {
     "access": "public"
