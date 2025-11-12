@@ -476,7 +476,7 @@ export class CogTiffImage {
     const actualBytes = new Uint8Array(bytes.byteLength + tableData.length - 2);
     actualBytes.set(tableData, 0);
     actualBytes.set(new Uint8Array(bytes).slice(2), tableData.length);
-    return actualBytes;
+    return actualBytes.buffer;
   }
 
   /** Read image bytes at the given offset */

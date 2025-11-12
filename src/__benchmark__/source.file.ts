@@ -12,7 +12,11 @@ export class TestFileSource implements Source {
 
   async fetch(offset: number, length: number): Promise<ArrayBuffer> {
     const fileData = await this.data;
-    return fileData.buffer.slice(fileData.byteOffset + offset, fileData.byteOffset + offset + length);
+    const buffer = fileData.buffer;
+    if (!(buffer instanceof ArrayBuffer)) {
+      throw new Error('SharedArrayBuffer is not supported');
+    }
+    return buffer.slice(fileData.byteOffset + offset, fileData.byteOffset + offset + length);
   }
 
   get size(): Promise<number> {
