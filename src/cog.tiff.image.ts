@@ -99,6 +99,29 @@ export class CogTiffImage {
   }
 
   /**
+   * Preload the tile or strip index arrays so subsequent {@link getTile} or
+   * {@link getStrip} calls do not issue a per-tile HTTP request to resolve
+   * the tile offset and byte count.
+   *
+   * Both offsets and byte counts are loaded, including for GDAL-optimized COGs
+   * with a block leader, so that {@link getTileSize} can answer from the index
+   * arrays without an extra per-tile leader fetch.
+   *
+   * Safe to call multiple times; arrays are only fetched once per image.
+   */
+  async preload(): Promise<void> {
+    const toLoad: TiffTag[] = [];
+    if (this.isTiled()) {
+      toLoad.push(TiffTag.TileOffsets);
+      toLoad.push(TiffTag.TileByteCounts);
+    } else {
+      toLoad.push(TiffTag.StripOffsets);
+      toLoad.push(TiffTag.StripByteCounts);
+    }
+    await Promise.all(toLoad.map((t) => this.fetch(t)));
+  }
+
+  /**
    * Get the value of a TiffTag if it has been loaded, null otherwise
    *
    * if the value is not loaded @see {CogTiffImage.fetch}
@@ -561,8 +584,25 @@ export class CogTiffImage {
    * @returns Offset and byteCount for the tile
    */
   async getTileSize(index: number): Promise<{ offset: number; imageSize: number }> {
-    // GDAL optimizes tiles by storing the size of the tile in
-    // the few bytes leading up to the tile
+    // Prefer the TileByteCounts index over the GDAL block leader so we avoid a
+    // per-tile HTTP range request for every tile. If the tag is present but not
+    // yet loaded, load it once here for the whole image.
+    const byteCounts = this.tags.get(TiffTag.TileByteCounts);
+    if (byteCounts != null) {
+      if (byteCounts.type === 'offset' && !byteCounts.isLoaded) {
+        await this.fetch(TiffTag.TileByteCounts);
+      } else if (byteCounts.type === 'lazy' && byteCounts.value == null) {
+        await this.fetch(TiffTag.TileByteCounts);
+      }
+      const [offset, imageSize] = await Promise.all([
+        getOffset(this.tiff, this.tileOffset, index),
+        getOffset(this.tiff, byteCounts as TagOffset | TagInline<number | number[]>, index),
+      ]);
+      return { offset, imageSize };
+    }
+
+    // No TileByteCounts tag available. Fall back to the GDAL block leader if
+    // present (per-tile 8-byte fetch), otherwise we have nothing to work with.
     const leaderBytes = this.tiff.options?.tileLeaderByteSize;
     if (leaderBytes) {
       const offset = await getOffset(this.tiff, this.tileOffset, index);
@@ -575,13 +615,7 @@ export class CogTiffImage {
       return { offset, imageSize: getUint(new DataView(bytes), 0, leaderBytes, this.tiff.isLittleEndian) };
     }
 
-    const byteCounts = this.tags.get(TiffTag.TileByteCounts) as TagOffset;
-    if (byteCounts == null) throw new Error('No tile byte counts found');
-    const [offset, imageSize] = await Promise.all([
-      getOffset(this.tiff, this.tileOffset, index),
-      getOffset(this.tiff, byteCounts, index),
-    ]);
-    return { offset, imageSize };
+    throw new Error('No tile byte counts found');
   }
 }
 

@@ -6,6 +6,9 @@ import { SourceMemory } from '../__benchmark__/source.memory.js';
 import { ByteSize } from '../util/bytes.js';
 import { CogTiff } from '../cog.tiff.js';
 import { TiffMimeType } from '../const/tiff.mime.js';
+import { TiffTag } from '../const/tiff.tag.id.js';
+import type { Source } from '../source.js';
+import type { TagOffset } from '../read/tiff.tag.js';
 
 // 900913 properties.
 const A = 6378137.0;
@@ -201,5 +204,163 @@ describe('CogStrip', () => {
     const stripB = await firstImage.getStrip(1);
     assert.equal(stripB?.mimeType, TiffMimeType.Webp);
     assert.equal(stripB?.bytes.byteLength, 152);
+  });
+});
+
+/** Wraps a source and records every fetch call for assertions */
+class CountingSource implements Source {
+  url: URL;
+  inner: Source;
+  fetches: Array<{ offset: number; length?: number }> = [];
+  constructor(inner: Source) {
+    this.inner = inner;
+    this.url = inner.url;
+  }
+  get metadata(): Source['metadata'] {
+    return this.inner.metadata;
+  }
+  async fetch(offset: number, length?: number): Promise<ArrayBuffer> {
+    this.fetches.push({ offset, length });
+    return this.inner.fetch(offset, length as number);
+  }
+}
+
+describe('CogTiffImage.preload', () => {
+  it('should load TileOffsets and TileByteCounts for a tiled cog', async () => {
+    const source = new TestFileSource(new URL('../../data/rgba8_tiled.tiff', import.meta.url));
+    const cog = await CogTiff.create(source);
+    const img = cog.images[0];
+
+    const offsets = img.tags.get(TiffTag.TileOffsets) as TagOffset;
+    const byteCounts = img.tags.get(TiffTag.TileByteCounts) as TagOffset;
+    assert.equal(offsets.type, 'offset');
+    assert.equal(byteCounts.type, 'offset');
+
+    await img.preload();
+
+    assert.equal(offsets.isLoaded, true);
+    assert.equal(byteCounts.isLoaded, true);
+    assert.equal(offsets.value.length, offsets.count);
+    assert.equal(byteCounts.value.length, byteCounts.count);
+  });
+
+  it('should load TileByteCounts even when a GDAL block leader is present', async () => {
+    const source = new TestFileSource(new URL('../../data/sparse.tiff', import.meta.url));
+    const cog = await CogTiff.create(source);
+    assert.equal(cog.options?.tileLeaderByteSize, ByteSize.UInt32);
+
+    const img = cog.images[0];
+    const offsets = img.tags.get(TiffTag.TileOffsets) as TagOffset;
+    const byteCounts = img.tags.get(TiffTag.TileByteCounts) as TagOffset;
+
+    await img.preload();
+
+    assert.equal(offsets.isLoaded, true);
+    assert.equal(byteCounts.isLoaded, true);
+  });
+
+  it('should load StripOffsets and StripByteCounts for a striped cog', async () => {
+    const source = new TestFileSource(new URL('../../data/rgba8_strip.tiff', import.meta.url));
+    const cog = await CogTiff.create(source);
+    const img = cog.images[0];
+    assert.equal(img.isTiled(), false);
+
+    const offsets = img.tags.get(TiffTag.StripOffsets) as TagOffset;
+    const byteCounts = img.tags.get(TiffTag.StripByteCounts) as TagOffset;
+
+    await img.preload();
+
+    assert.equal(offsets.isLoaded, true);
+    assert.equal(byteCounts.isLoaded, true);
+  });
+
+  it('should be idempotent', async () => {
+    const source = new TestFileSource(new URL('../../data/rgba8_tiled.tiff', import.meta.url));
+    const cog = await CogTiff.create(source);
+    const img = cog.images[0];
+
+    await img.preload();
+    await img.preload();
+
+    const offsets = img.tags.get(TiffTag.TileOffsets) as TagOffset;
+    assert.equal(offsets.isLoaded, true);
+  });
+
+  it('should avoid per-tile offset fetches for subsequent getTile calls', async () => {
+    const inner = new TestFileSource(new URL('../../data/rgba8_tiled.tiff', import.meta.url));
+    const counter = new CountingSource(inner);
+    const cog = await CogTiff.create(counter);
+    const img = cog.images[0];
+
+    const offsets = img.tags.get(TiffTag.TileOffsets) as TagOffset;
+    const byteCounts = img.tags.get(TiffTag.TileByteCounts) as TagOffset;
+    const offsetRange = { start: offsets.dataOffset, end: offsets.dataOffset + offsets.count * 8 };
+    const byteRange = { start: byteCounts.dataOffset, end: byteCounts.dataOffset + byteCounts.count * 8 };
+
+    await img.preload();
+    counter.fetches.length = 0;
+
+    const { tileCount } = img;
+    for (let x = 0; x < tileCount.x; x++) {
+      for (let y = 0; y < tileCount.y; y++) {
+        await img.getTile(x, y);
+      }
+    }
+
+    // No fetch after preload should overlap with the tile index arrays
+    for (const f of counter.fetches) {
+      const end = f.offset + (f.length ?? 0);
+      const overlapsOffsets = f.offset < offsetRange.end && end > offsetRange.start;
+      const overlapsByteCounts = f.offset < byteRange.end && end > byteRange.start;
+      assert.equal(overlapsOffsets, false, `fetch ${f.offset}+${f.length} overlaps TileOffsets`);
+      assert.equal(overlapsByteCounts, false, `fetch ${f.offset}+${f.length} overlaps TileByteCounts`);
+    }
+  });
+
+  it('should avoid per-tile leader fetches on a GDAL-optimized cog after preload', async () => {
+    const inner = new TestFileSource(new URL('../../data/sparse.tiff', import.meta.url));
+    const counter = new CountingSource(inner);
+    const cog = await CogTiff.create(counter);
+    const leaderBytes = cog.options?.tileLeaderByteSize;
+    assert.equal(leaderBytes, ByteSize.UInt32);
+    const img = cog.images[0];
+
+    await img.preload();
+    counter.fetches.length = 0;
+
+    const { tileCount } = img;
+    for (let x = 0; x < tileCount.x; x++) {
+      for (let y = 0; y < tileCount.y; y++) {
+        await img.getTileSize(y * tileCount.x + x);
+      }
+    }
+
+    // A leader fetch is identifiable as a request of exactly leaderBytes
+    for (const f of counter.fetches) {
+      assert.notEqual(f.length, leaderBytes, `unexpected leader-sized fetch @ ${f.offset}+${f.length}`);
+    }
+  });
+
+  it('should avoid per-tile leader fetches even without an explicit preload', async () => {
+    const inner = new TestFileSource(new URL('../../data/sparse.tiff', import.meta.url));
+    const counter = new CountingSource(inner);
+    const cog = await CogTiff.create(counter);
+    const leaderBytes = cog.options?.tileLeaderByteSize;
+    assert.equal(leaderBytes, ByteSize.UInt32);
+    const img = cog.images[0];
+
+    counter.fetches.length = 0;
+
+    const { tileCount } = img;
+    for (let x = 0; x < tileCount.x; x++) {
+      for (let y = 0; y < tileCount.y; y++) {
+        await img.getTileSize(y * tileCount.x + x);
+      }
+    }
+
+    // A leader fetch is identifiable as a request of exactly leaderBytes
+    for (const f of counter.fetches) {
+      assert.notEqual(f.length, leaderBytes, `unexpected leader-sized fetch @ ${f.offset}+${f.length}`);
+    }
   });
 });
